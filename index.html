@@ -372,8 +372,24 @@ function openScanModal(){
 }
 
 function processScan(tipo,imgDataUrl,cb){
+  // Compress image before sending to reduce payload size
+  var canvas=document.createElement("canvas");
+  var img=new Image();
+  img.onload=function(){
+    var maxW=1024,maxH=1024;
+    var w=img.width,h=img.height;
+    if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+    if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
+    canvas.width=w;canvas.height=h;
+    canvas.getContext("2d").drawImage(img,0,0,w,h);
+    var compressed=canvas.toDataURL("image/jpeg",0.8);
+    _doFetch(tipo,compressed,cb);
+  };
+  img.src=imgDataUrl;
+}
+function _doFetch(tipo,imgDataUrl,cb){
   var base64=imgDataUrl.split(",")[1];
-  var mediaType=imgDataUrl.split(";")[0].split(":")[1]||"image/jpeg";
+  var mediaType="image/jpeg";
 
   var prompt="";
   if(tipo==="fab"){
@@ -384,7 +400,7 @@ function processScan(tipo,imgDataUrl,cb){
     prompt="Esta es una hoja 'Movimientos de Produccion' de Macrosoft. Determina si es Fabrica Produccion o Fabrica Envasado (esta en cursiva debajo del titulo). Si es Fabrica Produccion: extrae lote, fecha, producto granel (sin parentesis, codigo tipo F+numeros) y cantidad. Si es Fabrica Envasado: extrae fecha, granel y presentaciones. Responde SOLO en JSON sin markdown. Para produccion: {\"tipo\":\"produccion\",\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}. Para envasado: {\"tipo\":\"envasado\",\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
   }
 
-  fetch("https://script.google.com/macros/s/AKfycbxuNwjr1t2E5xxc0E89dFy10ZPwqmfq8gXQVYJ6zwNiP_UHJw433iAsMkXneIVmfihS/exec",{
+  fetch("https://script.google.com/macros/s/AKfycbzlxA_k5KPpozwQ95iQ5DY30EP0D1iPBmwr51SpCdG6seohVLcmeZjjR1rKTgoflqBiYg/exec",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
