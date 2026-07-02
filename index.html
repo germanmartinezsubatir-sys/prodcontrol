@@ -384,7 +384,7 @@ function processScan(tipo,imgDataUrl,cb){
     prompt="Esta es una hoja 'Movimientos de Produccion' de Macrosoft. Determina si es Fabrica Produccion o Fabrica Envasado (esta en cursiva debajo del titulo). Si es Fabrica Produccion: extrae lote, fecha, producto granel (sin parentesis, codigo tipo F+numeros) y cantidad. Si es Fabrica Envasado: extrae fecha, granel y presentaciones. Responde SOLO en JSON sin markdown. Para produccion: {\"tipo\":\"produccion\",\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}. Para envasado: {\"tipo\":\"envasado\",\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
   }
 
-  fetch("https://api.anthropic.com/v1/messages",{
+  fetch("https://script.google.com/macros/s/AKfycbxuNwjr1t2E5xxc0E89dFy10ZPwqmfq8gXQVYJ6zwNiP_UHJw433iAsMkXneIVmfihS/exec",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
