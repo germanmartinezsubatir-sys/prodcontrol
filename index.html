@@ -372,17 +372,26 @@ function openScanModal(){
 }
 
 function processScan(tipo,imgDataUrl,cb){
-  // Compress image before sending to reduce payload size
   var canvas=document.createElement("canvas");
   var img=new Image();
   img.onload=function(){
-    var maxW=1024,maxH=1024;
+    // Aggressive compression: max 800px, quality 0.6
+    var maxW=800,maxH=800;
     var w=img.width,h=img.height;
     if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
     if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
     canvas.width=w;canvas.height=h;
-    canvas.getContext("2d").drawImage(img,0,0,w,h);
-    var compressed=canvas.toDataURL("image/jpeg",0.8);
+    var ctx=canvas.getContext("2d");
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    var compressed=canvas.toDataURL("image/jpeg",0.6);
+    // Check size - if still too big, compress more
+    if(compressed.length>500000){
+      canvas.width=Math.round(w*0.7);canvas.height=Math.round(h*0.7);
+      ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      compressed=canvas.toDataURL("image/jpeg",0.5);
+    }
     _doFetch(tipo,compressed,cb);
   };
   img.src=imgDataUrl;
@@ -402,7 +411,7 @@ function _doFetch(tipo,imgDataUrl,cb){
 
   fetch("https://script.google.com/macros/s/AKfycbzlxA_k5KPpozwQ95iQ5DY30EP0D1iPBmwr51SpCdG6seohVLcmeZjjR1rKTgoflqBiYg/exec",{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:{"Content-Type":"text/plain"},
     body:JSON.stringify({
       model:"claude-sonnet-4-6",
       max_tokens:1000,
