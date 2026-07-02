@@ -402,11 +402,11 @@ function _doFetch(tipo,imgDataUrl,cb){
 
   var prompt="";
   if(tipo==="fab"){
-    prompt="Esta es una hoja 'Movimientos de Produccion - Fabrica Produccion' de Macrosoft. Extraé exactamente: lote (el numero despues de LOTE N°), fecha (formato DD/MM/YYYY), el producto granel (la fila cuya cantidad NO tiene parentesis y cuyo codigo empieza con letra como F seguido de numeros, que es el producto final fabricado), y la cantidad de ese granel en kg o litros (numero sin parentesis). Las filas con cantidad entre parentesis son materias primas — ignoralas. Responde SOLO en JSON sin markdown: {\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}";
+    prompt="Esta es una hoja Movimientos de Produccion - Fabrica Produccion de Macrosoft. IMPORTANTE sobre los numeros: el formato usa coma como separador de miles y punto como decimal. Ejemplo: 1,000.000 = 1000 kg/litros. 3,000.000 = 3000. 750.000 = 750. Nunca multipliques por 1000. Extraé: lote (numero despues de LOTE N), fecha (DD/MM/YYYY), producto granel (fila SIN parentesis en cantidad, codigo empieza con letra F + numeros, es el producto final), cantidad del granel como numero entero interpretando el formato de miles correctamente. Filas con cantidad entre parentesis son materias primas — ignoralas completamente. Responde SOLO JSON sin markdown ni texto extra: {\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}";
   } else if(tipo==="env"){
-    prompt="Esta es una hoja 'Movimientos de Produccion - Fabrica Envasado' de Macrosoft. Extraé: fecha (DD/MM/YYYY), el granel (fila con codigo que empieza con letra tipo F seguido de numeros, su cantidad esta entre parentesis — dame el nombre del granel), y las presentaciones finales (filas cuya cantidad NO tiene parentesis, son los productos envasados). Cada presentacion tiene nombre y cantidad en unidades. Ignorar etiquetas, tapas, botellas (materias primas con parentesis). Responde SOLO en JSON sin markdown: {\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
+    prompt="Esta es una hoja Movimientos de Produccion - Fabrica Envasado de Macrosoft. IMPORTANTE numeros: coma=separador de miles, punto=decimal. 800.000=800, 1,000.000=1000. IMPORTANTE presentaciones: interpreta equivalencias comunes: 1/2 kg = 500g, 1/4 kg = 250g, 1/4 Kg = 250g, 1 lt = 1 L = 1000ml, 1/2 lt = 500ml, x 1 L = 1 litro, x 5 L = 5 litros, x 1 Kg = 1 kg, x 500g = 500 gramos. Al extraer el nombre de la presentacion, usalo exactamente como aparece en la hoja. Extraé: fecha (DD/MM/YYYY), granel (fila con codigo F+numeros y cantidad entre parentesis — solo el nombre del producto granel), presentaciones finales (filas SIN parentesis, son productos terminados — ignorar etiquetas, tapas, botellas, envases que son MP). Cada presentacion: nombre exacto como aparece y cantidad como numero entero. Responde SOLO JSON sin markdown: {\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
   } else {
-    prompt="Esta es una hoja 'Movimientos de Produccion' de Macrosoft. Determina si es Fabrica Produccion o Fabrica Envasado (esta en cursiva debajo del titulo). Si es Fabrica Produccion: extrae lote, fecha, producto granel (sin parentesis, codigo tipo F+numeros) y cantidad. Si es Fabrica Envasado: extrae fecha, granel y presentaciones. Responde SOLO en JSON sin markdown. Para produccion: {\"tipo\":\"produccion\",\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}. Para envasado: {\"tipo\":\"envasado\",\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
+    prompt="Esta es una hoja Movimientos de Produccion de Macrosoft. Determina si es Fabrica Produccion o Fabrica Envasado (en cursiva debajo del titulo). IMPORTANTE numeros: coma=miles, punto=decimal. 1,000.000=1000. 800.000=800. Nunca multipliques por 1000. IMPORTANTE equivalencias: 1/2 kg=500g, 1/4 kg=250g, 1 lt=1L, x 5 L=5 litros. Si Fabrica Produccion: lote, fecha, granel (sin parentesis, codigo F+numeros), cantidad entera. Si Fabrica Envasado: fecha, granel (codigo F+numeros con parentesis), presentaciones finales (sin parentesis, no MP). Responde SOLO JSON: Produccion: {\"tipo\":\"produccion\",\"lote\":\"...\",\"fecha\":\"...\",\"producto\":\"...\",\"cantidad\":NUMERO}. Envasado: {\"tipo\":\"envasado\",\"fecha\":\"...\",\"granel\":\"...\",\"presentaciones\":[{\"nombre\":\"...\",\"cantidad\":NUMERO}]}";
   }
 
   fetch("https://script.google.com/macros/s/AKfycbzlxA_k5KPpozwQ95iQ5DY30EP0D1iPBmwr51SpCdG6seohVLcmeZjjR1rKTgoflqBiYg/exec",{
@@ -435,29 +435,30 @@ function aplicarDatosScan(tipo,result){
   if(tipo==="frac"&&result.tipo){tipo=result.tipo==="produccion"?"fab":"env";}
 
   if(tipo==="fab"){
-    // Go to Fabricar page and pre-fill
     showPage("fab");
+    fillSelects();
     setTimeout(function(){
-      // Pre-fill lote
       var loteEl=document.getElementById("fLote");
       if(loteEl&&result.lote)loteEl.value=result.lote;
-      // Pre-fill litros
       var litrosEl=document.getElementById("fLitros");
       if(litrosEl&&result.cantidad)litrosEl.value=result.cantidad;
-      // Pre-fill producto via search
       var prodBox=document.getElementById("fProducto");
       if(prodBox&&result.producto){
         var inp=prodBox.querySelector(".srch-inp");
         if(inp){
-          inp.value=result.producto;
-          // Try to find matching product
           var prods=(ST.productos||[]).map(function(p){return p.nombre;});
           var match=prods.find(function(p){return p.toLowerCase().indexOf(result.producto.toLowerCase().split(" ")[0])>=0;});
-          if(match)inp.value=match;
+          inp.value=match||result.producto;
         }
       }
-      toast("Hoja leída: "+result.producto+" — revisá y completá tanque y fabricante");
-    },300);
+      // Pre-fill tanque: pick first libre
+      var libres=TANK_LIST.filter(function(t){var s=getTankState(t.id).estado;return s==="libre"||s==="cola";});
+      var fTanqueEl=document.getElementById("fTanque");
+      if(fTanqueEl&&libres.length){fTanqueEl.value=libres[0].id;}
+      // Auto-fill litros from tank capacity if not set
+      if(litrosEl&&!litrosEl.value&&libres.length){litrosEl.value=libres[0].cap;}
+      toast("✅ Hoja leída: "+result.producto+" — revisá tanque y fabricante");
+    },500);
   } else if(tipo==="env"){
     showPage("env");
     setTimeout(function(){
