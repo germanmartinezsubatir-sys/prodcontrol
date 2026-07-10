@@ -179,54 +179,104 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   if(srch)srch.value="";
 }function rEnv(){  var activeTab=document.querySelector("#envTabGroup .tab-btn.active");  var activeTabId=activeTab?activeTab.dataset.tab:"envCola";  var envs=ST.envasados||[];  var colav=envs.filter(function(e){return e.estado==="cola";});  var activos=envs.filter(function(e){return e.estado==="activo";});  var pausados=envs.filter(function(e){return e.estado==="pausado";});  var hist=envs.filter(function(e){return e.estado==="finalizado"||e.estado==="cancelado";});  document.getElementById("envCola").innerHTML=renderEnvList(colav,"cola");  document.getElementById("envActivo").innerHTML=renderEnvList(activos,"activo");  document.getElementById("envPau").innerHTML=renderEnvList(pausados,"pausado");  document.getElementById("envHist").innerHTML=renderEnvList(hist,"hist");  showTab("envTabGroup",activeTabId);}function renderEnvList(list,tipo){  if(!list.length)return '<div class="empty-state">Sin registros</div>';  return list.map(function(e){    var btns="";    if(tipo==="cola"){      btns='<button class="btn btn-green btn-sm" data-act="iniEnv" data-id="'+e.id+'">Iniciar</button>'+           '<button class="btn btn-sec btn-sm" data-act="asignEnv" data-id="'+e.id+'">Asignar</button>'+           '<button class="btn btn-red btn-sm" data-act="canEnv" data-id="'+e.id+'">Cancelar</button>';    }    if(tipo==="activo"){      btns='<button class="btn btn-sec btn-sm" data-act="pausEnv" data-id="'+e.id+'">Pausar</button>'+           '<button class="btn btn-green btn-sm" data-act="finEnv" data-id="'+e.id+'">Finalizar</button>'+           '<button class="btn btn-blue btn-sm" data-act="asignEnv" data-id="'+e.id+'">Asignar</button>';    }    if(tipo==="pausado"){      btns='<button class="btn btn-pri btn-sm" data-act="iniEnv" data-id="'+e.id+'">Reanudar</button>'+           '<button class="btn btn-green btn-sm" data-act="finEnv" data-id="'+e.id+'">Finalizar</button>';    }    return '<div class="fab-card"><div class="fab-info">'+      '<b>'+e.producto+'</b>'+      '<span class="fab-meta">'+e.tanqueId+' · '+e.presentacion+' · '+e.cantidad+' u</span>'+      '<span class="fab-meta">Op1: '+e.op1+(e.op2?' · Op2: '+e.op2:"")+'</span>'+      '<span class="fab-meta">'+e.etiquetado+'</span>'+      '</div><div class="fab-btns">'+btns+'</div></div>';  }).join("");}function doNewEnv(){  var tid=document.getElementById("eTanque").value;  var pres=document.getElementById("ePres").value;  var cant=parseInt(document.getElementById("eCant").value)||0;  var etiq=document.getElementById("eEtiq").value;  var op1=document.getElementById("eOp1").value;  var op2=document.getElementById("eOp2").value||"";  if(!tid){toast("Selecciona un tanque");return;}  if(!pres){toast("Selecciona presentacion");return;}  if(cant<=0){toast("Ingresa la cantidad");return;}  if(!op1){toast("Operaria 1 es obligatoria");return;}  var ts=getTankState(tid);  if(ts.estado!=="para-envasar"&&ts.estado!=="cola-env"){toast("El tanque no está listo para envasar");return;}  var fab=ts.fab;  var e={id:uid(),tanqueId:tid,fabricacionId:fab?fab.id:"",producto:fab?fab.producto:"",presentacion:pres,    cantidad:cant,op1:op1,op2:op2,etiquetado:etiq,inicio:null,fin:null,estado:"cola",    pausas:[],cantPausada:0,creadoPor:who(),finalizadoPor:null};  ST.envasados.push(e);  saveFB(function(){renderAll();toast("Envasado en cola");});  document.getElementById("eCant").value="";}function iniEnv(id){  var e=ST.envasados.find(function(x){return x.id===id;});  if(!e)return;  var wasPaused=e.estado==="pausado";  e.estado="activo";  if(!e.inicio)e.inicio=now();  if(wasPaused){e.pausas=e.pausas||[];var last=e.pausas[e.pausas.length-1];if(last&&!last.fin)last.fin=now();}  e.iniciadoPor=who();  saveFB(function(){renderAll();toast(wasPaused?"Envasado reanudado":"Envasado iniciado");});}function pausEnv(id){  var e=ST.envasados.find(function(x){return x.id===id;});if(!e)return;  var bodyEl=document.createElement("div");  var info=document.createElement("div");info.style.cssText="font-size:.82rem;color:#94a3b8;margin-bottom:12px";info.textContent=e.producto+" · "+e.presentacion;  var fg=document.createElement("div");fg.className="form-group";  var lbl=document.createElement("label");lbl.className="form-label";lbl.textContent="Unidades envasadas hasta ahora";  var inp=document.createElement("input");inp.type="number";inp.className="form-ctrl";inp.placeholder="0 si no envaso nada";  fg.appendChild(lbl);fg.appendChild(inp);bodyEl.appendChild(info);bodyEl.appendChild(fg);  var bd=mkModal("mPausEnv","Pausar Envasado","","");  var modalDiv=bd.querySelector(".modal");modalDiv.insertBefore(bodyEl,modalDiv.querySelector(".modal-title").nextSibling);  var ft=document.createElement("div");ft.className="modal-footer";  var bCan=document.createElement("button");bCan.className="btn btn-sec";bCan.textContent="Cancelar";  bCan.addEventListener("click",function(){if(document.getElementById("mPausEnv"))document.body.removeChild(bd);});  var bOk=document.createElement("button");bOk.className="btn btn-pri";bOk.textContent="Pausar";  bOk.addEventListener("click",function(){    var cant=parseInt(inp.value)||0;    e.estado="pausado";e.pausas=e.pausas||[];e.pausas.push({inicio:now(),cantAlPausar:cant});    if(cant>0)e.cantPausada=(e.cantPausada||0)+cant;    if(document.getElementById("mPausEnv"))document.body.removeChild(bd);    saveFB(function(){renderAll();toast("Envasado pausado");});  });  ft.appendChild(bCan);ft.appendChild(bOk);modalDiv.appendChild(ft);  setTimeout(function(){inp.focus();},100);}function finEnv(id){  var e=ST.envasados.find(function(x){return x.id===id;});  if(!e)return;  e.estado="finalizado";e.fin=now();e.finalizadoPor=who();  checkRecord(e);  var rem=tankRemainingLiters(e.tanqueId);  if(rem<=0){var fab=ST.fabricaciones.find(function(f){return f.id===e.fabricacionId;});  if(fab&&fab.estado==="para-envasar"){fab.estado="finalizado";fab.fin=now();fab.finalizadoPor="Sistema";}}  saveFB(function(){renderAll();toast("Envasado finalizado");});}function canEnv(id){  if(!confirm("¿Cancelar este envasado?"))return;  var e=ST.envasados.find(function(x){return x.id===id;});  if(!e)return;  e.estado="cancelado";e.fin=now();e.finalizadoPor=who();  saveFB(function(){renderAll();toast("Envasado cancelado");});}function asignEnv(id){  var e=ST.envasados.find(function(x){return x.id===id;});  if(!e)return;  var ops=(ST.operarias||[]).filter(function(o){return o.activo!==false;}).sort(function(a,b){return a.nombre.localeCompare(b.nombre);});  var m=mkModal("mAsign","Asignar Operarias",'<div class="form-group" style="margin-bottom:10px"><label class="form-label">Operaria 1 *</label><select id="asOp1" class="form-ctrl">'+ops.map(function(o){return '<option value="'+o.nombre+'">'+o.nombre+' ('+o.categoria+')</option>';}).join("")+'</select></div>'+'<div class="form-group"><label class="form-label">Operaria 2</label><select id="asOp2" class="form-ctrl"><option value="">-- Ninguna --</option>'+ops.map(function(o){return '<option value="'+o.nombre+'">'+o.nombre+' ('+o.categoria+')</option>';}).join("")+'</select></div>',"");  var footer=document.createElement("div");footer.className="modal-footer";  var bok=document.createElement("button");bok.className="btn btn-pri";bok.textContent="Guardar";  bok.addEventListener("click",function(){    var op1=document.getElementById("asOp1").value;    var op2=document.getElementById("asOp2").value||"";    if(!op1){toast("Operaria 1 es obligatoria");return;}    e.op1=op1;e.op2=op2;    saveFB(function(){renderAll();toast("Asignacion guardada");});    document.body.removeChild(m);  });  var bcan=document.createElement("button");bcan.className="btn btn-sec";bcan.textContent="Cancelar";  bcan.addEventListener("click",function(){document.body.removeChild(m);});  footer.appendChild(bcan);footer.appendChild(bok);  m.querySelector(".modal").appendChild(footer);  if(e.op1){var s1=document.getElementById("asOp1");if(s1)s1.value=e.op1;}  if(e.op2){var s2=document.getElementById("asOp2");if(s2)s2.value=e.op2;}}function rFrac(){
   var fracs=ST.fraccionados||[];
-  // fracCola: fraccionados sin estado o en espera
   var cola=fracs.filter(function(f){return !f.estado||f.estado==="cola";});
-  // fracActivo: fraccionados en proceso
   var activos=fracs.filter(function(f){return f.estado==="activo";});
-  // fracPausado
   var pausados=fracs.filter(function(f){return f.estado==="pausado";});
-  // fracHist2: todos los demás (finalizados + los del scan que no tienen estado)
-  // Mostramos TODOS en historial para que siempre sean visibles
   var hist=fracs.slice().sort(function(a,b){return new Date(b.fecha)-new Date(a.fecha);});
 
-  function fracCard(f){
+  function mkOpSel(currentOp){
+    var sel=document.createElement("select");sel.className="form-ctrl";
+    sel.style.cssText="font-size:.7rem;padding:3px 6px;height:auto;margin-top:4px;width:100%";
+    var o0=document.createElement("option");o0.value="";o0.textContent="-- Operario/a --";sel.appendChild(o0);
+    (ST.operarias||[]).filter(function(o){return o.activo!==false;}).forEach(function(op){
+      var o=document.createElement("option");o.value=op.nombre;o.textContent=op.nombre;
+      if(op.nombre===currentOp)o.selected=true;
+      sel.appendChild(o);
+    });
+    return sel;
+  }
+
+  function fracCard(f, showActions){
     var title=(f.producto||f.descripcion||"Fraccionado");
     var sub=(f.presentacion&&f.presentacion!==title?" · "+f.presentacion:"");
-    var div=document.createElement("div");
-    div.className="hist-card";div.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px";
-    var info=document.createElement("div");info.style.flex="1";
-    var hdrEl=document.createElement("div");hdrEl.className="hc-title";
-    hdrEl.textContent=title+sub;
+    var card=document.createElement("div");
+    card.className="hist-card";card.style.cssText="padding:8px 10px;margin-bottom:6px;background:#111;border-radius:8px";
+
+    // Header row: título + borrar
+    var hdrRow=document.createElement("div");hdrRow.style.cssText="display:flex;align-items:flex-start;justify-content:space-between;gap:6px";
+    var titleDiv=document.createElement("div");titleDiv.style.flex="1";
+    var hdrEl=document.createElement("div");hdrEl.className="hc-title";hdrEl.textContent=title+sub;
     if(f.lote){var lt=document.createElement("span");lt.style.cssText="font-size:.6rem;color:#f59e0b;margin-left:5px";lt.textContent="L:"+f.lote;hdrEl.appendChild(lt);}
     if(f.tipo){var tt=document.createElement("span");tt.style.cssText="font-size:.6rem;color:#64748b;margin-left:5px";tt.textContent="["+f.tipo+"]";hdrEl.appendChild(tt);}
     if(f.cantidad){var ct=document.createElement("span");ct.style.cssText="color:#f97316;margin-left:5px";ct.textContent=f.cantidad+" u";hdrEl.appendChild(ct);}
     var metaEl=document.createElement("div");metaEl.className="hc-meta";
-    metaEl.textContent=(f.operario||"Sin asignar")+" · "+fmtDT(f.fecha)+(f.estado?" · "+f.estado:"");
-    info.appendChild(hdrEl);info.appendChild(metaEl);
+    metaEl.textContent=(f.operario||"Sin asignar")+" · "+fmtDT(f.fecha);
+    titleDiv.appendChild(hdrEl);titleDiv.appendChild(metaEl);
+
     var bDel=document.createElement("button");bDel.className="btn btn-red btn-sm";bDel.style.flexShrink="0";bDel.textContent="✕";
     (function(fid){bDel.addEventListener("click",function(){
       if(!confirm("Eliminar fraccionado?"))return;
       ST.fraccionados=(ST.fraccionados||[]).filter(function(x){return x.id!==fid;});
       saveFB(function(){rFrac();toast("Eliminado");});
     });})(f.id);
-    div.appendChild(info);div.appendChild(bDel);
-    return div;
+
+    hdrRow.appendChild(titleDiv);hdrRow.appendChild(bDel);
+    card.appendChild(hdrRow);
+
+    // Action buttons para cola/activos/pausados
+    if(showActions){
+      var actRow=document.createElement("div");actRow.style.cssText="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap";
+      var opSel=mkOpSel(f.operario);opSel.style.flex="1";actRow.appendChild(opSel);
+
+      if(!f.estado||f.estado==="cola"||f.estado==="pausado"){
+        var bIni=document.createElement("button");bIni.className="btn btn-pri btn-sm";bIni.textContent="▶ Iniciar";
+        (function(fref){bIni.addEventListener("click",function(){
+          var op=opSel.value||fref.operario||"";
+          if(!op){toast("Elegí un operario primero");return;}
+          fref.estado="activo";fref.operario=op;fref.inicio=now();
+          saveFB(function(){rFrac();toast("Fraccionado iniciado");});
+        });})(f);
+        actRow.appendChild(bIni);
+      }
+      if(f.estado==="activo"){
+        var bPau=document.createElement("button");bPau.className="btn btn-sec btn-sm";bPau.textContent="⏸ Pausar";
+        (function(fref){bPau.addEventListener("click",function(){
+          fref.estado="pausado";
+          saveFB(function(){rFrac();toast("Pausado");});
+        });})(f);
+        var bFin=document.createElement("button");bFin.className="btn btn-green btn-sm";bFin.textContent="✔ Finalizar";
+        (function(fref){bFin.addEventListener("click",function(){
+          fref.estado="finalizado";fref.fin=now();
+          saveFB(function(){rFrac();toast("Finalizado");});
+        });})(f);
+        actRow.appendChild(bPau);actRow.appendChild(bFin);
+      }
+      var bOp=document.createElement("button");bOp.className="btn btn-sec btn-sm";bOp.textContent="Reasignar";
+      (function(fref){bOp.addEventListener("click",function(){
+        var op=opSel.value;if(!op){toast("Elegí operario");return;}
+        fref.operario=op;
+        saveFB(function(){rFrac();toast("Reasignado a "+op);});
+      });})(f);
+      actRow.appendChild(bOp);
+      card.appendChild(actRow);
+    }
+    return card;
   }
 
-  function fillTab(elId, items, emptyMsg){
+  function fillTab(elId, items, emptyMsg, actions){
     var el=document.getElementById(elId);if(!el)return;
     el.innerHTML="";
-    if(items.length) items.forEach(function(f){el.appendChild(fracCard(f));});
+    if(items.length) items.forEach(function(f){el.appendChild(fracCard(f,actions));});
     else el.innerHTML="<div class='empty-state'>"+emptyMsg+"</div>";
   }
 
-  fillTab("fracCola", cola, "Sin fraccionados en cola");
-  fillTab("fracActivo", activos, "Sin fraccionados activos");
-  fillTab("fracPausado", pausados, "Sin fraccionados pausados");
-  fillTab("fracHist2", hist, "Sin registros de fraccionado");
+  fillTab("fracCola", cola, "Sin fraccionados en cola", true);
+  fillTab("fracActivo", activos, "Sin fraccionados activos", true);
+  fillTab("fracPausado", pausados, "Sin fraccionados pausados", true);
+  fillTab("fracHist2", hist, "Sin registros de fraccionado", false);
 
   var activeTab=document.querySelector("#fracTabGroup .tab-btn.active");
-  var activeTabId=activeTab?activeTab.dataset.tab:"fracHist2";
+  var activeTabId=activeTab?activeTab.dataset.tab:"fracCola";
   showTab("fracTabGroup",activeTabId);
 }function renderHist(){  var filter=document.getElementById("histFilter").value;  var search=(document.getElementById("histSearch").value||"").toLowerCase();  var items=[];  if(!filter||filter==="fabricacion"){(ST.fabricaciones||[]).forEach(function(f){items.push({tipo:"fabricacion",fecha:f.fin||f.inicioReal||f.inicio,data:f});});}  if(!filter||filter==="envasado"){(ST.envasados||[]).forEach(function(e){if(e.estado==="finalizado"||e.estado==="cancelado")items.push({tipo:"envasado",fecha:e.fin||e.inicio,data:e});});}  if(!filter||filter==="fraccionado"){(ST.fraccionados||[]).forEach(function(f){items.push({tipo:"fraccionado",fecha:f.fecha,data:f});});}  items.sort(function(a,b){return new Date(b.fecha)-new Date(a.fecha);});  if(search)items=items.filter(function(i){return JSON.stringify(i.data).toLowerCase().indexOf(search)>=0;});  var el=document.getElementById("histData");if(!el)return;  if(!items.length){el.innerHTML="<div class='empty-state'>Sin registros</div>";return;}  el.innerHTML="";
   items.forEach(function(i){
@@ -615,9 +665,10 @@ function aplicarDatosScan(tipo,result){
       var loteEl=document.getElementById("fLote");if(loteEl&&result.lote)loteEl.value=result.lote;
       var litrosEl=document.getElementById("fLitros");if(litrosEl&&result.cantidad)litrosEl.value=result.cantidad;
       var prodBox=document.getElementById("fProducto");
-      if(prodBox&&result.producto){var inp=prodBox.querySelector(".srch-inp");
-        if(inp){var prods=(ST.productos||[]).map(function(p){return p.nombre;});
-          // Match estricto: solo autocompletar si TODAS las palabras clave coinciden
+      if(prodBox){
+        var inp=prodBox.querySelector(".srch-inp");
+        if(inp){
+          var prods=(ST.productos||[]).map(function(p){return p.nombre;});
           var needle=(result.producto||"").toLowerCase().trim();
           var needleWords=needle.split(/\s+/).filter(function(w){return w.length>2;});
           var bestScore=-1;var bestMatch=null;
@@ -628,14 +679,15 @@ function aplicarDatosScan(tipo,result){
             if(pl===needle)score=needleWords.length+20;
             if(score>bestScore){bestScore=score;bestMatch=p;}
           });
-          // Solo autocompletar si matchean TODAS las palabras clave (o match exacto)
           var threshold=needleWords.length;
-          inp.value=(bestScore>=threshold&&threshold>0?bestMatch:"")||"";
-          // Mostrar el producto OCR como placeholder/hint
-          inp.placeholder="OCR: "+(result.producto||"")+" — buscá arriba";
-          }}
+          // Si hay match exacto, completar; si no, poner el texto OCR directamente
+          // para que el usuario vea qué leyó y pueda editar
+          inp.value=(bestScore>=threshold&&threshold>0?bestMatch:(result.producto||""));
+          inp.focus();
+        }
+      }
       var fTEl=document.getElementById("fTanque");if(fTEl&&TANK_LIST.length)fTEl.value=TANK_LIST[0].id;
-      toast("Hoja leida: "+(result.producto||"")+" — revisá tanque y fabricante");},500);
+      toast("OCR: "+(result.producto||"(no detectado)")+" — Verificá el producto y el tanque");},500);
   } else if(tipo==="env"){
     if(!result.presentaciones||!result.presentaciones.length){toast("No se detectaron presentaciones");return;}
     // Build modal to pick tank and lote
