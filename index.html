@@ -165,6 +165,14 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   if(!tid){toast("Selecciona un tanque");return;}
   if(!prod){toast("Selecciona un producto");return;}
   if(litros<=0){toast("Ingresa los litros");return;}
+  // Verificar lote duplicado
+  if(lote){
+    var loteExiste=(ST.fabricaciones||[]).find(function(x){return x.lote&&x.lote.trim().toLowerCase()===lote.toLowerCase();});
+    if(loteExiste){
+      toast("⚠ Lote "+lote+" ya existe en fabricaciones ("+loteExiste.producto+")");
+      return;
+    }
+  }
   var f={id:uid(),tanqueId:tid,producto:prod,litros:litros,fabricante:fab,lote:lote,
     inicio:_inicioReal||now(),
     inicioReal:estadoInicial==="fabricando"?(_inicioReal||now()):(_enCurso?(_inicioReal||now()):null),
@@ -639,6 +647,16 @@ function aplicarDatosScan(tipo,result){
 
       var bReg=document.createElement("button");bReg.className="btn btn-pri";bReg.textContent="✔ Registrar";
       bReg.addEventListener("click",function(){
+        // Verificar lote duplicado
+        if(result.lote){
+          var _loteEx=(ST.fraccionados||[]).find(function(x){
+            return x.lote&&x.lote.trim().toLowerCase()===result.lote.trim().toLowerCase();
+          });
+          if(_loteEx){
+            toast("⚠ Lote "+result.lote+" ya registrado: "+(_loteEx.producto||"")+" ("+fmtDT(_loteEx.fecha)+")");
+            return;
+          }
+        }
         var entries=pres.length?pres:[{nombre:result.producto||"Fraccionado",cantidad:0}];
         entries.forEach(function(p){
           ST.fraccionados=ST.fraccionados||[];
@@ -776,7 +794,7 @@ function aplicarDatosScan(tipo,result){
         saveFB(function(){renderAll();toast(result.presentaciones.length+" envasado(s) "+(estado==="activo"?"iniciado(s)":"en cola"));});
       }
 
-      bCola.addEventListener("click",function(){_doEnvScan("cola-env");});
+      bCola.addEventListener("click",function(){_doEnvScan("cola");});
       bIni.addEventListener("click",function(){_doEnvScan("activo");});
 
       ft2.appendChild(bC2);ft2.appendChild(bCola);ft2.appendChild(bIni);md2.appendChild(ft2);
