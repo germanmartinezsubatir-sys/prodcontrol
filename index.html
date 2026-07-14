@@ -322,27 +322,25 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   });}function renderKPIs(){
   var envs=(ST.envasados||[]).filter(function(e){return e.estado==="finalizado";});
   var fracs=(ST.fraccionados||[]);
+  var ops=ST.operarias||[];
 
-  // ── Tab Operarias ──
+  // ── Tab Operarias: tabla resumen ──
   var el=document.getElementById("kpiData");
   if(el){
-    var ops={};
+    var opMap={};
     envs.forEach(function(e){
-      var ops1=[e.op1||e.operaria1,e.op2||e.operaria2].filter(Boolean);
-      ops1.forEach(function(op){
-        if(!ops[op])ops[op]={nombre:op,envs:0,uds:0,mins:0};
-        ops[op].envs++;ops[op].uds+=(e.cantidad||0);
-        if(e.inicio&&e.fin)ops[op].mins+=Math.round(calcEffMins(e));
+      [e.op1||e.operaria1,e.op2||e.operaria2].filter(Boolean).forEach(function(op){
+        if(!opMap[op])opMap[op]={nombre:op,lotes:0,uds:0,mins:0};
+        opMap[op].lotes++;opMap[op].uds+=(e.cantidad||0);
+        if(e.inicio&&e.fin)opMap[op].mins+=Math.round(calcEffMins(e));
       });
     });
-    var rows=Object.keys(ops).map(function(k){var o=ops[k];o.vel=o.mins>0?Math.round(o.uds/o.mins*10)/10:0;return o;}).sort(function(a,b){return b.uds-a.uds;});
-    if(!rows.length){el.innerHTML="<div class='empty-state'>Sin datos de envasado</div>";}
-    else{
-      el.innerHTML='<table class="kpi-table"><thead><tr><th>#</th><th>Operaria</th><th>Lotes</th><th>Uds</th><th>u/min</th><th>Horas</th></tr></thead><tbody>'
-        +rows.map(function(r,i){var medal=i===0?"\uD83E\uDD47":i===1?"\uD83E\uDD48":i===2?"\uD83E\uDD49":"";
-          return '<tr><td>'+(medal||(i+1))+'</td><td>'+r.nombre+'</td><td>'+r.envs+'</td><td>'+r.uds+'</td><td>'+r.vel+'</td><td>'+(r.mins/60).toFixed(1)+'</td></tr>';
-        }).join("")+'</tbody></table>';
-    }
+    var rows=Object.keys(opMap).map(function(k){var o=opMap[k];o.vel=o.mins>0?Math.round(o.uds/o.mins*10)/10:0;return o;}).sort(function(a,b){return b.uds-a.uds;});
+    if(!rows.length)el.innerHTML="<div class='empty-state'>Sin datos de envasado</div>";
+    else el.innerHTML='<table class="kpi-table"><thead><tr><th>#</th><th>Operaria</th><th>Lotes</th><th>Uds</th><th>u/min</th><th>Horas</th></tr></thead><tbody>'
+      +rows.map(function(r,i){var medal=i===0?"\uD83E\uDD47":i===1?"\uD83E\uDD48":i===2?"\uD83E\uDD49":"";
+        return '<tr><td>'+(medal||(i+1))+'</td><td>'+r.nombre+'</td><td>'+r.lotes+'</td><td>'+r.uds+'</td><td>'+r.vel+'</td><td>'+(r.mins/60).toFixed(1)+'</td></tr>';
+      }).join("")+'</tbody></table>';
   }
 
   // ── Tab Productos ──
@@ -357,42 +355,95 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
     });
     var pRows=Object.keys(prods).map(function(k){var p=prods[k];p.vel=p.velN>0?Math.round(p.velSum/p.velN*10)/10:0;return p;}).sort(function(a,b){return b.uds-a.uds;});
     if(!pRows.length)elP.innerHTML="<div class='empty-state'>Sin datos</div>";
-    else elP.innerHTML='<table class="kpi-table"><thead><tr><th>Producto</th><th>Present.</th><th>Lotes</th><th>Uds</th><th>u/min</th></tr></thead><tbody>'
+    else elP.innerHTML='<table class="kpi-table"><thead><tr><th>Producto</th><th>Presentaci\u00f3n</th><th>Lotes</th><th>Uds</th><th>u/min</th></tr></thead><tbody>'
       +pRows.map(function(r){return '<tr><td>'+r.prod+'</td><td>'+r.pres+'</td><td>'+r.lotes+'</td><td>'+r.uds+'</td><td>'+r.vel+'</td></tr>';}).join("")+'</tbody></table>';
   }
 
-  // ── Tab Ranking ──
+  // ── Tab Ranking: evaluaci\u00f3n por categor\u00eda ──
   var elR=document.getElementById("kpiRankingData");
   if(elR){
-    var rops={};
+    // Construir datos por operaria
+    var rData={};
     envs.forEach(function(e){
       [e.op1||e.operaria1,e.op2||e.operaria2].filter(Boolean).forEach(function(op){
-        if(!rops[op])rops[op]={nombre:op,uds:0,mins:0,fracs:0};
-        rops[op].uds+=(e.cantidad||0);
-        if(e.inicio&&e.fin)rops[op].mins+=calcEffMins(e);
+        if(!rData[op])rData[op]={nombre:op,uds:0,mins:0,vels:[],prods:{},lotes:0,fracs:0};
+        var d=rData[op];
+        d.uds+=(e.cantidad||0);d.lotes++;
+        if(e.inicio&&e.fin&&e.cantidad>0){
+          var m=calcEffMins(e);
+          if(m>0){d.mins+=m;d.vels.push(e.cantidad/m);}
+        }
+        if(e.producto)d.prods[e.producto]=1;
       });
     });
-    fracs.forEach(function(f){if(f.operario){if(!rops[f.operario])rops[f.operario]={nombre:f.operario,uds:0,mins:0,fracs:0};rops[f.operario].fracs++;}});
-    var rRows=Object.keys(rops).map(function(k){var o=rops[k];o.vel=o.mins>0?o.uds/o.mins:0;return o;});
+    fracs.forEach(function(f){
+      if(f.operario){if(!rData[f.operario])rData[f.operario]={nombre:f.operario,uds:0,mins:0,vels:[],prods:{},lotes:0,fracs:0};rData[f.operario].fracs++;}
+    });
+
+    // Calcular m\u00e9tricas por operaria
+    var rRows=Object.keys(rData).map(function(k){
+      var d=rData[k];
+      var opInfo=ops.find(function(o){return o.nombre===k;})||{categoria:"gen\u00e9rico"};
+      d.categoria=opInfo.categoria||"gen\u00e9rico";
+      d.velProm=d.vels.length>0?d.vels.reduce(function(a,b){return a+b;},0)/d.vels.length:0;
+      d.variedad=Object.keys(d.prods).length;
+      // Consistencia: desviaci\u00f3n est\u00e1ndar de velocidades (menor = m\u00e1s consistente)
+      if(d.vels.length>1){
+        var mean=d.velProm;
+        var variance=d.vels.reduce(function(a,v){return a+Math.pow(v-mean,2);},0)/d.vels.length;
+        d.stdDev=Math.sqrt(variance);
+        // cv = coeficiente de variaci\u00f3n (0-1, menor es mejor)
+        d.cv=mean>0?d.stdDev/mean:1;
+      } else {d.stdDev=0;d.cv=0;}
+      return d;
+    });
+
     if(!rRows.length){elR.innerHTML="<div class='empty-state'>Sin datos para ranking</div>";return;}
-    var maxUds=Math.max.apply(null,rRows.map(function(r){return r.uds;}))||1;
-    var maxVel=Math.max.apply(null,rRows.map(function(r){return r.vel;}))||1;
-    var maxFrac=Math.max.apply(null,rRows.map(function(r){return r.fracs;}))||1;
-    rRows.forEach(function(r){r.score=Math.round((r.uds/maxUds)*50+(r.vel/maxVel)*30+(r.fracs/maxFrac)*20);});
+
+    // Calcular score por categor\u00eda (velocidad relativa al promedio del grupo)
+    var catGroups={};
+    rRows.forEach(function(r){
+      if(!catGroups[r.categoria])catGroups[r.categoria]=[];
+      catGroups[r.categoria].push(r);
+    });
+
+    rRows.forEach(function(r){
+      var group=catGroups[r.categoria];
+      var avgVel=group.reduce(function(a,x){return a+x.velProm;},0)/group.length||1;
+      var maxVar=Math.max.apply(null,group.map(function(x){return x.variedad;}))||1;
+      var maxFrac=Math.max.apply(null,group.map(function(x){return x.fracs;}))||1;
+      var maxHrs=Math.max.apply(null,group.map(function(x){return x.mins/60;}))||1;
+
+      // Velocidad relativa al promedio de su categor\u00eda (50%)
+      var sVel=Math.min(100,(r.velProm/avgVel)*50);
+      // Consistencia: sin variaci\u00f3n = 100%, mucha variaci\u00f3n = 0% (20%)
+      var sCons=r.vels.length>1?(1-Math.min(1,r.cv))*20:10;
+      // Variedad de productos manejados (15%)
+      var sVar=(r.variedad/maxVar)*15;
+      // Fraccionados completados (10%)
+      var sFrac=(r.fracs/maxFrac)*10;
+      // Horas trabajadas (5%)
+      var sHrs=((r.mins/60)/maxHrs)*5;
+
+      r.score=Math.round(sVel+sCons+sVar+sFrac+sHrs);
+    });
     rRows.sort(function(a,b){return b.score-a.score;});
+
     elR.innerHTML=
-      '<div style="background:#0f172a;border-radius:8px;padding:10px 12px;margin-bottom:12px">'
-      +'<div style="font-size:.68rem;color:#f59e0b;font-weight:700;margin-bottom:6px">\uD83C\uDFAF C\u00f3mo se calcula el ranking</div>'
-      +'<div style="font-size:.65rem;color:#94a3b8;line-height:1.7">'
-      +'<b>Unidades envasadas (50%)</b> \u2014 total de unidades producidas en lotes finalizados.<br>'
-      +'<b>Velocidad (30%)</b> \u2014 promedio de u/min en todos sus envasados.<br>'
-      +'<b>Fraccionados (20%)</b> \u2014 cantidad de fraccionados registrados.<br>'
-      +'Cada factor se normaliza 0\u2013100 y se pondera. Score m\u00e1ximo: 100.'
+      '<div style="background:#0f172a;border-radius:8px;padding:12px 14px;margin-bottom:14px">'
+      +'<div style="font-size:.7rem;color:#f59e0b;font-weight:700;margin-bottom:8px">\uD83C\uDFAF C\u00f3mo se calcula el ranking</div>'
+      +'<div style="font-size:.65rem;color:#94a3b8;line-height:1.8">'
+      +'<b>Velocidad relativa (50%)</b> \u2014 qu\u00e9 tan r\u00e1pida es <i>comparada con el promedio de su categor\u00eda</i>. Una envasadora de densos no compite contra l\u00edquidos.<br>'
+      +'<b>Consistencia (20%)</b> \u2014 qu\u00e9 tan estable es su velocidad entre lotes. Menor variaci\u00f3n = mayor puntaje.<br>'
+      +'<b>Variedad (15%)</b> \u2014 cantidad de productos distintos que maneja (polivalencia).<br>'
+      +'<b>Fraccionados (10%)</b> \u2014 fraccionados completados en el per\u00edodo.<br>'
+      +'<b>Horas trabajadas (5%)</b> \u2014 tiempo efectivo registrado (sin pausas).'
       +'</div></div>'
-      +'<table class="kpi-table"><thead><tr><th>#</th><th>Operaria</th><th>Score</th><th>Uds</th><th>u/min</th><th>Fracs</th></tr></thead><tbody>'
+      +'<table class="kpi-table"><thead><tr><th>#</th><th>Operaria</th><th>Categ.</th><th>Score</th><th>u/min</th><th>Consist.</th><th>Variad.</th></tr></thead><tbody>'
       +rRows.map(function(r,i){
         var medal=i===0?"\uD83E\uDD47":i===1?"\uD83E\uDD48":i===2?"\uD83E\uDD49":"";
-        return '<tr><td>'+(medal||(i+1))+'</td><td><b>'+r.nombre+'</b></td><td><b>'+r.score+'</b></td><td>'+r.uds+'</td><td>'+Math.round(r.vel*10)/10+'</td><td>'+r.fracs+'</td></tr>';
+        var cons=r.vels.length>1?Math.round((1-Math.min(1,r.cv))*100)+"%":"N/D";
+        return '<tr><td>'+(medal||(i+1))+'</td><td><b>'+r.nombre+'</b></td><td style="font-size:.65rem;color:#64748b">'+r.categoria+'</td><td><b>'+r.score+'</b></td><td>'+Math.round(r.velProm*10)/10+'</td><td>'+cons+'</td><td>'+r.variedad+'</td></tr>';
       }).join("")
       +'</tbody></table>';
   }
@@ -771,12 +822,21 @@ function renderHistMensual(){
   (ST.fabricaciones||[]).forEach(function(f){if(f.estado==="cancelado")return;var fecha=f.inicioReal||f.inicio;if(inMonth(fecha,prevY,prevM))totalPrev+=f.litros||0;});
   (ST.envasados||[]).forEach(function(e){if(e.estado==="cancelado")return;var fecha=e.estado==="finalizado"?e.fin:e.inicio;if(!inMonth(fecha,prevY,prevM))return;var mul=parseLitros(e.presentacion)||0;if(mul>0)totalPrev+=Math.round(mul*e.cantidad*10)/10;});
   (ST.fraccionados||[]).forEach(function(f){if(!inMonth(f.fecha,prevY,prevM))return;var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;if(pesoUnit>0)totalPrev+=Math.round(f.cantidad*pesoUnit*100)/100;});
+
+  // Calcular también el mismo mes del año anterior
+  var prevYearY=_hmYear-1;var prevYearM=_hmMonth;
+  var totalPrevYear=0;
+  (ST.fabricaciones||[]).forEach(function(f){if(f.estado==="cancelado")return;var fecha=f.inicioReal||f.inicio;if(inMonth(fecha,prevYearY,prevYearM))totalPrevYear+=f.litros||0;});
+  (ST.envasados||[]).forEach(function(e){if(e.estado==="cancelado")return;var fecha=e.estado==="finalizado"?e.fin:e.inicio;if(!inMonth(fecha,prevYearY,prevYearM))return;var mul=parseLitros(e.presentacion)||0;if(mul>0)totalPrevYear+=Math.round(mul*e.cantidad*10)/10;});
+  (ST.fraccionados||[]).forEach(function(f){if(!inMonth(f.fecha,prevYearY,prevYearM))return;var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;if(pesoUnit>0)totalPrevYear+=Math.round(f.cantidad*pesoUnit*100)/100;});
+
   var diff=totalMes-totalPrev;var diffColor=diff>=0?"#22c55e":"#ef4444";var diffSign=diff>=0?"+":"";
+  var diffYear=totalMes-totalPrevYear;var diffYearColor=diffYear>=0?"#22c55e":"#ef4444";var diffYearSign=diffYear>=0?"+":"";
   var filterHtml='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
   filterHtml+='<button data-hmf="" style="padding:4px 10px;border-radius:4px;border:1px solid '+(_hmEstadoFilter===""?"#f97316":"#1e1e1e")+';background:'+(_hmEstadoFilter===""?"#451a03":"#111")+';color:'+(_hmEstadoFilter===""?"#f97316":"#64748b")+';font-size:.65rem;cursor:pointer">Todos</button>';
   ESTADO_ORDER.forEach(function(key){var ec=ESTADO_COLORS[key];if(!ec)return;var active=_hmEstadoFilter===key;filterHtml+='<button data-hmf="'+key+'" style="padding:4px 10px;border-radius:4px;border:1px solid '+(active?ec.color:"#1e1e1e")+';background:'+(active?ec.bg:"#111")+';color:'+(active?ec.color:"#64748b")+';font-size:.65rem;cursor:pointer">'+ec.label+'</button>';});
   filterHtml+='</div>';
-  sEl.innerHTML=filterHtml+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center"><div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">PRODUCCIÓN '+MONTHS[_hmMonth].toUpperCase()+'</div><div style="font-size:2rem;font-weight:800;color:#f97316">'+Math.round(totalMes*10)/10+' <span style="font-size:.9rem">L/Kg</span></div><div style="font-size:.72rem;margin-top:6px;color:'+diffColor+'">'+diffSign+Math.round(diff*10)/10+' vs mes anterior</div></div><div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center"><div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">'+MONTHS[prevM].toUpperCase()+' '+prevY+'</div><div style="font-size:2rem;font-weight:800;color:#64748b">'+Math.round(totalPrev*10)/10+' <span style="font-size:.9rem">L/Kg</span></div><div style="font-size:.72rem;margin-top:6px;color:#475569">mes anterior</div></div></div>';
+  sEl.innerHTML=filterHtml+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center"><div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">PRODUCCIÓN '+MONTHS[_hmMonth].toUpperCase()+'</div><div style="font-size:2rem;font-weight:800;color:#f97316">'+Math.round(totalMes*10)/10+' <span style="font-size:.9rem">L/Kg</span></div><div style="font-size:.72rem;margin-top:6px;color:'+diffColor+'">'+diffSign+Math.round(diff*10)/10+' vs mes anterior</div><div style=\'font-size:.63rem;margin-top:2px;color:\'+diffYearColor+\'\'>\'+diffYearSign+Math.round(diffYear*10)/10+\' vs \'+MONTHS[prevYearM]+\' \'+prevYearY+\'</div></div><div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center"><div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">'+MONTHS[prevM].toUpperCase()+' '+prevY+'</div><div style="font-size:2rem;font-weight:800;color:#64748b">'+Math.round(totalPrev*10)/10+' <span style="font-size:.9rem">L/Kg</span></div><div style="font-size:.72rem;margin-top:6px;color:#475569">mes anterior</div></div></div>';
   if(!filteredRows.length){tblEl.innerHTML='<div class="empty-state">Sin registros'+((_hmEstadoFilter)?' para ese estado':' en '+MONTHS[_hmMonth]+" "+_hmYear)+'</div>';return;}
   var html='<table style="width:100%;border-collapse:collapse;font-size:.75rem;min-width:500px"><thead><tr style="border-bottom:2px solid #1e1e1e"><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase;white-space:nowrap">Fecha</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Producto</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Estado</th><th style="text-align:right;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">L/Kg</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Operario</th></tr></thead><tbody>';
   filteredRows.forEach(function(r,i){var ec=ESTADO_COLORS[r.estado]||{bg:"#1a1a1a",color:"#94a3b8",label:r.estado};var rowBg=i%2===0?"#0a0a0a":"#0f0f0f";html+='<tr style="background:'+rowBg+';border-left:3px solid '+ec.color+'"><td style="padding:7px 8px;color:#64748b;white-space:nowrap;font-size:.68rem">'+fmtFecha(r.fecha)+'</td><td style="padding:7px 8px;color:#f1f5f9;font-weight:600">'+r.producto+(r.lote?'<div style="font-size:.6rem;color:#f59e0b">Lote: '+r.lote+'</div>':"")+(r.presentacion?'<div style="font-size:.6rem;color:#64748b">'+r.presentacion+(r.cantidad?' · '+r.cantidad+' u':""+'</div>'):"")+'</td><td style="padding:7px 8px"><span style="background:'+ec.bg+';color:'+ec.color+';border-radius:4px;padding:2px 8px;font-size:.65rem;font-weight:600;white-space:nowrap">'+ec.label+'</span></td><td style="padding:7px 8px;text-align:right;font-weight:700;color:'+(r.litros>0?"#f97316":"#334155")+'">'+(r.litros>0?r.litros:"—")+'</td><td style="padding:7px 8px;color:#94a3b8;font-size:.7rem">'+r.operario+'</td></tr>';});
