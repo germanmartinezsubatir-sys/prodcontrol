@@ -790,58 +790,190 @@ var _hmMonth=new Date().getMonth();
 var _hmEstadoFilter="";
 function hmSetFilter(estado){_hmEstadoFilter=estado;renderHistMensual();}
 function renderHistMensual(){
-  var tEl=document.getElementById("hmTitle");var sEl=document.getElementById("hmSummary");var tblEl=document.getElementById("hmTable");
+  var tEl=document.getElementById("hmTitle");
+  var sEl=document.getElementById("hmSummary");
+  var tblEl=document.getElementById("hmTable");
   if(!tEl||!sEl||!tblEl)return;
+
   var MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   tEl.textContent=MONTHS[_hmMonth]+" "+_hmYear;
-  var ESTADO_ORDER=["finalizado","envasando","cola-env","finalizado-fab","fabricando","cola","para-envasar"];
-  var ESTADO_COLORS={"cola":{bg:"#451a03",color:"#f59e0b",label:"Cola Fabricacion"},"fabricando":{bg:"#2e1065",color:"#8b5cf6",label:"Fabricando"},"para-envasar":{bg:"#052e16",color:"#22c55e",label:"Para Envasar"},"finalizado-fab":{bg:"#166534",color:"#86efac",label:"Fabricado"},"cola-env":{bg:"#0c4a6e",color:"#06b6d4",label:"Cola Envasado"},"envasando":{bg:"#1e3a5f",color:"#3b82f6",label:"Envasando"},"finalizado":{bg:"#14532d",color:"#4ade80",label:"Finalizado"},"registrado":{bg:"#1e1b4b",color:"#a5b4fc",label:"Fraccionado"},"activo":{bg:"#1e3a5f",color:"#38bdf8",label:"En proceso"},"pausado":{bg:"#1a1a00",color:"#facc15",label:"Pausado"}};
+
+  var ESTADO_ORDER=["finalizado","envasando","cola-env","finalizado-fab","fabricando","cola","para-envasar","activo","registrado","pausado"];
+  var ESTADO_COLORS={
+    "cola":{bg:"#451a03",color:"#f59e0b",label:"Cola Fab."},
+    "fabricando":{bg:"#2e1065",color:"#8b5cf6",label:"Fabricando"},
+    "para-envasar":{bg:"#052e16",color:"#22c55e",label:"Para Envasar"},
+    "finalizado-fab":{bg:"#166534",color:"#86efac",label:"Fabricado"},
+    "cola-env":{bg:"#0c4a6e",color:"#06b6d4",label:"Cola Env."},
+    "envasando":{bg:"#1e3a5f",color:"#3b82f6",label:"Envasando"},
+    "finalizado":{bg:"#14532d",color:"#4ade80",label:"Finalizado"},
+    "registrado":{bg:"#1e1b4b",color:"#a5b4fc",label:"Fraccionado"},
+    "activo":{bg:"#1e3a5f",color:"#38bdf8",label:"En proceso"},
+    "pausado":{bg:"#1a1a00",color:"#facc15",label:"Pausado"}
+  };
+
   function inMonth(iso,y,m){if(!iso)return false;var d=new Date(iso);return d.getFullYear()===y&&d.getMonth()===m;}
-  function fmtFecha(iso){if(!iso)return "";var d=new Date(iso);return (d.getDate()<10?"0":"")+d.getDate()+"/"+(d.getMonth()<9?"0":"")+(d.getMonth()+1)+" "+(d.getHours()<10?"0":"")+d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes();}
-  var prevM=_hmMonth===0?11:_hmMonth-1;var prevY=_hmMonth===0?_hmYear-1:_hmYear;
+  function fmtFecha(iso){if(!iso)return "";var d=new Date(iso);
+    return (d.getDate()<10?"0":"")+d.getDate()+"/"+(d.getMonth()<9?"0":"")+(d.getMonth()+1)+" "+(d.getHours()<10?"0":"")+d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes();}
+
+  // Mes anterior
+  var prevM=_hmMonth===0?11:_hmMonth-1;
+  var prevY=_hmMonth===0?_hmYear-1:_hmYear;
+  // Mismo mes año anterior
+  var prevYearY=_hmYear-1;
+  var prevYearM=_hmMonth;
+
+  // Construir filas del mes actual
   var rows=[];
-  (ST.fabricaciones||[]).forEach(function(f){if(f.estado==="cancelado")return;var fecha=f.inicioReal||f.inicio;if(!inMonth(fecha,_hmYear,_hmMonth))return;var estadoKey=f.estado==="finalizado"?"finalizado-fab":f.estado;rows.push({fecha:fecha,producto:f.producto,estado:estadoKey,litros:f.litros||0,operario:f.fabricante||"",tipo:"fab",lote:f.lote||""});});
-  (ST.envasados||[]).forEach(function(e){if(e.estado==="cancelado")return;var fecha=e.estado==="finalizado"?e.fin:e.inicio;if(!inMonth(fecha,_hmYear,_hmMonth))return;var mul=parseLitros(e.presentacion)||0;var cant=e.estado==="finalizado"?e.cantidad:(e.cantPausada||e.cantidad);var litros=mul>0?Math.round(mul*cant*10)/10:0;var estadoKey=e.estado==="cola"?"cola-env":e.estado==="activo"?"envasando":e.estado;rows.push({fecha:fecha,producto:e.producto,estado:estadoKey,litros:litros,presentacion:e.presentacion,cantidad:e.cantidad,operario:e.op1||"",tipo:"env"});})
-  (ST.fraccionados||[]).forEach(function(f){
-    var fecha=f.fecha;
+  (ST.fabricaciones||[]).forEach(function(f){
+    if(f.estado==="cancelado")return;
+    var fecha=f.inicioReal||f.inicio;
     if(!inMonth(fecha,_hmYear,_hmMonth))return;
-    var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;
-    var kgTotal=pesoUnit>0?Math.round((f.cantidad||0)*pesoUnit*100)/100:0;
-    rows.push({tipo:'fraccionado',estado:f.estado||'registrado',fecha:fecha,
-      producto:f.producto||f.descripcion||'Fraccionado',
-      presentacion:f.presentacion||(f.tipo||''),
-      cantidad:f.cantidad,kgTotal:kgTotal,
-      litros:kgTotal,
-      lote:f.lote,operario:f.operario,
-      etiquetado:f.etiquetado});
+    var estadoKey=f.estado==="finalizado"?"finalizado-fab":f.estado;
+    rows.push({fecha:fecha,producto:f.producto,presentacion:"",cantidad:0,
+      estado:estadoKey,litros:f.litros||0,operario:f.fabricante||"",
+      tipo:"fab",lote:f.lote||""});
   });
-  rows.sort(function(a,b){var oa=ESTADO_ORDER.indexOf(a.estado);var ob=ESTADO_ORDER.indexOf(b.estado);if(oa<0)oa=99;if(ob<0)ob=99;if(oa!==ob)return oa-ob;return new Date(a.fecha)-new Date(b.fecha);});
+  (ST.envasados||[]).forEach(function(e){
+    if(e.estado==="cancelado")return;
+    var fecha=e.estado==="finalizado"?e.fin:e.inicio;
+    if(!inMonth(fecha,_hmYear,_hmMonth))return;
+    var mul=parseLitros(e.presentacion)||0;
+    var kg=mul>0?Math.round(mul*e.cantidad*10)/10:0;
+    rows.push({fecha:fecha,producto:e.producto,presentacion:e.presentacion,cantidad:e.cantidad,
+      estado:e.estado,litros:kg,operario:(e.op1||e.operaria1||""),
+      tipo:"env",lote:e.lote||""});
+  });
+  (ST.fraccionados||[]).forEach(function(f){
+    if(!inMonth(f.fecha,_hmYear,_hmMonth))return;
+    var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;
+    var kg=pesoUnit>0?Math.round((f.cantidad||0)*pesoUnit*100)/100:0;
+    rows.push({fecha:f.fecha,producto:f.producto||f.descripcion||"Fraccionado",
+      presentacion:f.presentacion||(f.tipo||""),cantidad:f.cantidad||0,
+      estado:f.estado||"registrado",litros:kg,operario:f.operario||"",
+      tipo:"frac",lote:f.lote||""});
+  });
+
+  rows.sort(function(a,b){
+    var oa=ESTADO_ORDER.indexOf(a.estado);var ob=ESTADO_ORDER.indexOf(b.estado);
+    if(oa<0)oa=99;if(ob<0)ob=99;
+    if(oa!==ob)return oa-ob;
+    return new Date(a.fecha)-new Date(b.fecha);
+  });
+
   var filteredRows=_hmEstadoFilter?rows.filter(function(r){return r.estado===_hmEstadoFilter;}):rows;
+
+  // Total mes actual
   var totalMes=rows.reduce(function(s,r){return s+(r.litros||0);},0);
+
+  // Total mes anterior
   var totalPrev=0;
-  (ST.fabricaciones||[]).forEach(function(f){if(f.estado==="cancelado")return;var fecha=f.inicioReal||f.inicio;if(inMonth(fecha,prevY,prevM))totalPrev+=f.litros||0;});
-  (ST.envasados||[]).forEach(function(e){if(e.estado==="cancelado")return;var fecha=e.estado==="finalizado"?e.fin:e.inicio;if(!inMonth(fecha,prevY,prevM))return;var mul=parseLitros(e.presentacion)||0;if(mul>0)totalPrev+=Math.round(mul*e.cantidad*10)/10;});
-  (ST.fraccionados||[]).forEach(function(f){if(!inMonth(f.fecha,prevY,prevM))return;var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;if(pesoUnit>0)totalPrev+=Math.round(f.cantidad*pesoUnit*100)/100;});
+  (ST.fabricaciones||[]).forEach(function(f){
+    if(f.estado==="cancelado")return;
+    var fecha=f.inicioReal||f.inicio;
+    if(inMonth(fecha,prevY,prevM))totalPrev+=f.litros||0;
+  });
+  (ST.envasados||[]).forEach(function(e){
+    if(e.estado==="cancelado")return;
+    var fecha=e.estado==="finalizado"?e.fin:e.inicio;
+    if(!inMonth(fecha,prevY,prevM))return;
+    var mul=parseLitros(e.presentacion)||0;
+    if(mul>0)totalPrev+=Math.round(mul*e.cantidad*10)/10;
+  });
+  (ST.fraccionados||[]).forEach(function(f){
+    if(!inMonth(f.fecha,prevY,prevM))return;
+    var pu=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;
+    if(pu>0)totalPrev+=Math.round((f.cantidad||0)*pu*100)/100;
+  });
 
-  // Calcular también el mismo mes del año anterior
-  var prevYearY=_hmYear-1;var prevYearM=_hmMonth;
+  // Total mismo mes año anterior
   var totalPrevYear=0;
-  (ST.fabricaciones||[]).forEach(function(f){if(f.estado==="cancelado")return;var fecha=f.inicioReal||f.inicio;if(inMonth(fecha,prevYearY,prevYearM))totalPrevYear+=f.litros||0;});
-  (ST.envasados||[]).forEach(function(e){if(e.estado==="cancelado")return;var fecha=e.estado==="finalizado"?e.fin:e.inicio;if(!inMonth(fecha,prevYearY,prevYearM))return;var mul=parseLitros(e.presentacion)||0;if(mul>0)totalPrevYear+=Math.round(mul*e.cantidad*10)/10;});
-  (ST.fraccionados||[]).forEach(function(f){if(!inMonth(f.fecha,prevYearY,prevYearM))return;var pesoUnit=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;if(pesoUnit>0)totalPrevYear+=Math.round(f.cantidad*pesoUnit*100)/100;});
+  (ST.fabricaciones||[]).forEach(function(f){
+    if(f.estado==="cancelado")return;
+    var fecha=f.inicioReal||f.inicio;
+    if(inMonth(fecha,prevYearY,prevYearM))totalPrevYear+=f.litros||0;
+  });
+  (ST.envasados||[]).forEach(function(e){
+    if(e.estado==="cancelado")return;
+    var fecha=e.estado==="finalizado"?e.fin:e.inicio;
+    if(!inMonth(fecha,prevYearY,prevYearM))return;
+    var mul=parseLitros(e.presentacion)||0;
+    if(mul>0)totalPrevYear+=Math.round(mul*e.cantidad*10)/10;
+  });
+  (ST.fraccionados||[]).forEach(function(f){
+    if(!inMonth(f.fecha,prevYearY,prevYearM))return;
+    var pu=parseLitros(f.presentacion)||parseLitros(f.tipo)||0;
+    if(pu>0)totalPrevYear+=Math.round((f.cantidad||0)*pu*100)/100;
+  });
 
-  var diff=totalMes-totalPrev;var diffColor=diff>=0?"#22c55e":"#ef4444";var diffSign=diff>=0?"+":"";
-  var diffYear=totalMes-totalPrevYear;var diffYearColor=diffYear>=0?"#22c55e":"#ef4444";var diffYearSign=diffYear>=0?"+":"";
+  var diff=totalMes-totalPrev;
+  var diffColor=diff>=0?"#22c55e":"#ef4444";
+  var diffSign=diff>=0?"+":"";
+  var diffYear=totalMes-totalPrevYear;
+  var diffYearColor=diffYear>=0?"#22c55e":"#ef4444";
+  var diffYearSign=diffYear>=0?"+":"";
+
+  // Filtros de estado
   var filterHtml='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
   filterHtml+='<button data-hmf="" style="padding:4px 10px;border-radius:4px;border:1px solid '+(_hmEstadoFilter===""?"#f97316":"#1e1e1e")+';background:'+(_hmEstadoFilter===""?"#451a03":"#111")+';color:'+(_hmEstadoFilter===""?"#f97316":"#64748b")+';font-size:.65rem;cursor:pointer">Todos</button>';
-  ESTADO_ORDER.forEach(function(key){var ec=ESTADO_COLORS[key];if(!ec)return;var active=_hmEstadoFilter===key;filterHtml+='<button data-hmf="'+key+'" style="padding:4px 10px;border-radius:4px;border:1px solid '+(active?ec.color:"#1e1e1e")+';background:'+(active?ec.bg:"#111")+';color:'+(active?ec.color:"#64748b")+';font-size:.65rem;cursor:pointer">'+ec.label+'</button>';});
+  ESTADO_ORDER.forEach(function(key){
+    var ec=ESTADO_COLORS[key];if(!ec)return;
+    var active=_hmEstadoFilter===key;
+    filterHtml+='<button data-hmf="'+key+'" style="padding:4px 10px;border-radius:4px;border:1px solid '+(active?ec.color:"#1e1e1e")+';background:'+(active?ec.bg:"#111")+';color:'+(active?ec.color:"#64748b")+';font-size:.65rem;cursor:pointer">'+ec.label+'</button>';
+  });
   filterHtml+='</div>';
-  sEl.innerHTML=filterHtml+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+'<div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center">'+'<div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">PRODUCCIÓN '+MONTHS[_hmMonth].toUpperCase()+'</div>'+'<div style="font-size:2rem;font-weight:800;color:#f97316">'+Math.round(totalMes*10)/10+' <span style="font-size:.9rem">L/Kg</span></div>'+'<div style="font-size:.72rem;margin-top:6px;color:'+diffColor+'">'+diffSign+Math.round(diff*10)/10+' vs mes anterior</div>'+'<div style="font-size:.63rem;margin-top:3px;color:'+diffYearColor+'">'+diffYearSign+Math.round(diffYear*10)/10+' vs '+MONTHS[prevYearM]+' '+prevYearY+'</div>'+'</div>'+'<div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center">'+'<div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">'+MONTHS[prevM].toUpperCase()+' '+prevY+'</div>'+'<div style="font-size:2rem;font-weight:800;color:#64748b">'+Math.round(totalPrev*10)/10+' <span style="font-size:.9rem">L/Kg</span></div>'+'<div style="font-size:.72rem;margin-top:6px;color:#475569">mes anterior</div>'+'</div>'+'</div>';
-  if(!filteredRows.length){tblEl.innerHTML='<div class="empty-state">Sin registros'+((_hmEstadoFilter)?' para ese estado':' en '+MONTHS[_hmMonth]+" "+_hmYear)+'</div>';return;}
-  var html='<table style="width:100%;border-collapse:collapse;font-size:.75rem;min-width:500px"><thead><tr style="border-bottom:2px solid #1e1e1e"><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase;white-space:nowrap">Fecha</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Producto</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Estado</th><th style="text-align:right;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">L/Kg</th><th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Operario</th></tr></thead><tbody>';
-  filteredRows.forEach(function(r,i){var ec=ESTADO_COLORS[r.estado]||{bg:"#1a1a1a",color:"#94a3b8",label:r.estado};var rowBg=i%2===0?"#0a0a0a":"#0f0f0f";html+='<tr style="background:'+rowBg+';border-left:3px solid '+ec.color+'"><td style="padding:7px 8px;color:#64748b;white-space:nowrap;font-size:.68rem">'+fmtFecha(r.fecha)+'</td><td style="padding:7px 8px;color:#f1f5f9;font-weight:600">'+r.producto+(r.lote?'<div style="font-size:.6rem;color:#f59e0b">Lote: '+r.lote+'</div>':"")+(r.presentacion?'<div style="font-size:.6rem;color:#64748b">'+r.presentacion+(r.cantidad?' · '+r.cantidad+' u':""+'</div>'):"")+'</td><td style="padding:7px 8px"><span style="background:'+ec.bg+';color:'+ec.color+';border-radius:4px;padding:2px 8px;font-size:.65rem;font-weight:600;white-space:nowrap">'+ec.label+'</span></td><td style="padding:7px 8px;text-align:right;font-weight:700;color:'+(r.litros>0?"#f97316":"#334155")+'">'+(r.litros>0?r.litros:"—")+'</td><td style="padding:7px 8px;color:#94a3b8;font-size:.7rem">'+r.operario+'</td></tr>';});
+
+  // KPI cards
+  sEl.innerHTML=filterHtml
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center">'
+    +'<div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">PRODUCCIÓN '+MONTHS[_hmMonth].toUpperCase()+'</div>'
+    +'<div style="font-size:2rem;font-weight:800;color:#f97316">'+Math.round(totalMes*10)/10+' <span style="font-size:.9rem">L/Kg</span></div>'
+    +'<div style="font-size:.72rem;margin-top:6px;color:'+diffColor+'">'+diffSign+Math.round(diff*10)/10+' vs '+MONTHS[prevM]+' '+prevY+'</div>'
+    +'<div style="font-size:.63rem;margin-top:3px;color:'+diffYearColor+'">'+diffYearSign+Math.round(diffYear*10)/10+' vs '+MONTHS[prevYearM]+' '+prevYearY+'</div>'
+    +'</div>'
+    +'<div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px;text-align:center">'
+    +'<div style="font-size:.58rem;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">'+MONTHS[prevM].toUpperCase()+' '+prevY+'</div>'
+    +'<div style="font-size:2rem;font-weight:800;color:#64748b">'+Math.round(totalPrev*10)/10+' <span style="font-size:.9rem">L/Kg</span></div>'
+    +'<div style="font-size:.72rem;margin-top:6px;color:#475569">mes anterior</div>'
+    +'</div>'
+    +'</div>';
+
+  if(!filteredRows.length){
+    tblEl.innerHTML='<div class="empty-state">Sin registros'+((_hmEstadoFilter)?' para ese estado':' en '+MONTHS[_hmMonth]+" "+_hmYear)+'</div>';
+    return;
+  }
+
+  // Tabla de registros
+  var html='<table style="width:100%;border-collapse:collapse;font-size:.75rem">'
+    +'<thead><tr style="border-bottom:2px solid #1e1e1e">'
+    +'<th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase;white-space:nowrap">Fecha</th>'
+    +'<th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Producto</th>'
+    +'<th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Estado</th>'
+    +'<th style="text-align:right;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">L/Kg</th>'
+    +'<th style="text-align:left;padding:7px 8px;color:#64748b;font-size:.6rem;text-transform:uppercase">Operario</th>'
+    +'</tr></thead><tbody>';
+
+  filteredRows.forEach(function(r,i){
+    var ec=ESTADO_COLORS[r.estado]||{bg:"#1a1a1a",color:"#94a3b8",label:r.estado||"—"};
+    var rowBg=i%2===0?"#0a0a0a":"#0f0f0f";
+    var subLine="";
+    if(r.presentacion){subLine='<div style="font-size:.6rem;color:#64748b">'+r.presentacion+(r.cantidad?' \xb7 '+r.cantidad+' u':"")+'</div>';}
+    if(r.lote){subLine+='<div style="font-size:.6rem;color:#f59e0b">Lote: '+r.lote+'</div>';}
+    html+='<tr style="background:'+rowBg+';border-left:3px solid '+ec.color+'">'
+      +'<td style="padding:7px 8px;color:#64748b;white-space:nowrap;font-size:.68rem">'+fmtFecha(r.fecha)+'</td>'
+      +'<td style="padding:7px 8px;color:#f1f5f9;font-weight:600">'+r.producto+subLine+'</td>'
+      +'<td style="padding:7px 8px"><span style="background:'+ec.bg+';color:'+ec.color+';border-radius:4px;padding:2px 8px;font-size:.65rem;font-weight:600;white-space:nowrap">'+ec.label+'</span></td>'
+      +'<td style="padding:7px 8px;text-align:right;font-weight:700;color:'+(r.litros>0?"#f97316":"#334155")+'">'+(r.litros>0?Math.round(r.litros*100)/100:"—")+'</td>'
+      +'<td style="padding:7px 8px;color:#94a3b8;font-size:.7rem">'+(r.operario||"")+'</td>'
+      +'</tr>';
+  });
+
   var filtTotal=filteredRows.reduce(function(s,r){return s+(r.litros||0);},0);
-  html+='<tr style="background:#111;border-top:2px solid #1e1e1e"><td colspan="3" style="padding:8px;color:#f1f5f9;font-size:.75rem;font-weight:700">TOTAL'+(_hmEstadoFilter?' — '+(ESTADO_COLORS[_hmEstadoFilter]||{label:_hmEstadoFilter}).label:"")+'</td><td style="padding:8px;text-align:right;color:#f97316;font-size:.85rem;font-weight:800">'+Math.round(filtTotal*10)/10+' L/Kg</td><td></td></tr></tbody></table>';
+  html+='<tr style="background:#111;border-top:2px solid #1e1e1e">'
+    +'<td colspan="3" style="padding:8px;color:#f1f5f9;font-size:.75rem;font-weight:700">TOTAL filtrado</td>'
+    +'<td style="padding:8px;text-align:right;color:#f97316;font-size:.85rem;font-weight:800">'+Math.round(filtTotal*10)/10+' L/Kg</td>'
+    +'<td></td></tr></tbody></table>';
   tblEl.innerHTML=html;
 }
 
